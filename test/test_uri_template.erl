@@ -2,6 +2,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 level_1_test_() -> run_tests(1).
+level_2_test_() -> run_tests(2).
 
 run_tests(Level) ->
 	{Variables, Tests} = load_tests_for_level(Level),

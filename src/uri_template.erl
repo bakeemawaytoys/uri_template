@@ -66,6 +66,8 @@ modifier_level4([Var]) -> case lists:reverse(Var) of
 			end.
 
 process_expression({expansion, Args, Vars}) -> string:join([ encode(process_variable(Var,Args)) || Var <- Vars  ],",");
+process_expression({reserved, Args, Vars}) -> string:join([reserved_encode(process_variable(Var,Args)) || Var <- Vars], ",");
+process_expression({fragment, Args, Vars}) -> "#" ++ process_expression({reserved, Args, Vars});
 process_expression(Exp) -> "".
 
 process_variable({Var},Args) ->proplists:get_value(Var,Args,"");
@@ -124,3 +126,13 @@ percent_encode(C) -> case is_unreserved(C) of
 -spec encode(string()) -> string().
 encode([]) -> "";
 encode([H|T]) -> percent_encode(H) ++ encode(T).
+
+reserved_encode([]) -> "";
+reserved_encode([$%,H,L|T]) when 16#30 =< H andalso H =< 16#39 andalso 16#65 =< H andalso H =< 16#70 andalso 16#97 =< H andalso H =< 16#102 
+		andalso 16#30 =< L andalso L =< 16#39 andalso 16#65 =< L andalso L =< 16#70 andalso 16#97 =< L andalso L =< 16#102 -> 
+	[$%,H,L] ++ reserved_encode(T);
+reserved_encode([H|T]) -> 
+	case is_unreserved(H) orelse is_reserved(H) of 
+		true -> [H] ++ reserved_encode(T);
+		false -> percent_encode(H) ++ reserved_encode(T)
+	end.
