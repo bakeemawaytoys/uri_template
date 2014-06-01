@@ -1,0 +1,14 @@
+{application, uri_template,
+ [
+  {description, "An Erlang uri_template library"},
+  {vsn, "1"},
+  {modules, [
+             uri_template
+            ]},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {env, []}
+ ]}.
