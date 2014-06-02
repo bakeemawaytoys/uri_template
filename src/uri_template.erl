@@ -38,9 +38,9 @@ extract_expression(Args,[H|T],Exp) -> extract_expression(Args,T,[H|Exp]).
 parse_expression(_Args,[]) -> "";
 parse_expression(Args, [$+|Exp]) -> process_expression({reserved, Args, variable_list(Exp)});
 parse_expression(Args, [$#|Exp]) -> process_expression({fragment, Args, variable_list(Exp) });
-parse_expression(Args, [$.|Exp]) -> process_expression({named, Args, variable_list(Exp)});
+parse_expression(Args, [$.|Exp]) -> process_expression({dot, Args, variable_list(Exp)});
 parse_expression(Args, [$/|Exp]) -> process_expression({path, Args, variable_list(Exp)});
-parse_expression(Args, [$;|Exp]) -> process_expression({pairs, Args, variable_list(Exp)});
+parse_expression(Args, [$;|Exp]) -> process_expression({path_param, Args, variable_list(Exp)});
 parse_expression(Args, [$?|Exp]) -> process_expression({query_component, Args, variable_list(Exp)});
 parse_expression(Args, [$&|Exp]) -> process_expression({query_continuation, Args, variable_list(Exp)});
 parse_expression(_Args, [$=|_]) -> erlang:error(reserved_operator);
@@ -68,12 +68,44 @@ modifier_level4([Var]) -> case lists:reverse(Var) of
 process_expression({expansion, Args, Vars}) -> string:join([ encode(process_variable(Var,Args)) || Var <- Vars  ],",");
 process_expression({reserved, Args, Vars}) -> string:join([reserved_encode(process_variable(Var,Args)) || Var <- Vars], ",");
 process_expression({fragment, Args, Vars}) -> "#" ++ process_expression({reserved, Args, Vars});
-process_expression(Exp) -> "".
+process_expression({dot, Args, Vars}) -> "." ++string:join([ encode(process_variable(Var,Args)) || Var <- Vars  ],".");
+process_expression({path, Args, Vars}) -> "/" ++string:join([ encode(process_variable(Var,Args)) || Var <- Vars  ],"/");
+process_expression({path_param, Args, Vars}) -> ";" ++string:join([ process_param_variable(Var,Args,";", fun(Value) -> Value end) || Var <- Vars  ],";");
+process_expression({query_component, Args, Vars}) -> "?" ++string:join([ process_param_variable(Var,Args,"&", fun(Value) -> Value ++ "=" end) || Var <- Vars  ],"&");
+process_expression({query_continuation, Args, Vars}) -> "&" ++string:join([ process_param_variable(Var,Args,"&", fun(Value) -> Value ++ "=" end) || Var <- Vars  ],"&");
+process_expression(_) -> barf.
 
-process_variable({Var},Args) ->proplists:get_value(Var,Args,"");
+process_variable({Var},Args) -> proplists:get_value(Var,Args,"");
 process_variable({explode,Var},Args) -> proplists:get_value(Var,Args,"");
 process_variable({prefix,Var,Len},Args) -> string:substr(proplists:get_value(Var,Args,""), 0, Len).
 
+process_param_variable({Var},Args,_Separator,HandleEmpty) ->
+	Encoded = encode(Var),
+       	case proplists:lookup(Var,Args) of 
+		{_, [ValueList]} when is_list(ValueList) -> Encoded ++ "=" ++ string:join(encode(ValueList),",");
+		{_,[]} -> HandleEmpty(Encoded);
+		{_, Value} when is_list(Value) -> Encoded ++ "=" ++ encode(Value);
+		{_}  -> HandleEmpty(Encoded);
+		none -> ""
+	end;
+process_param_variable({explode,Var},Args,Separator,HandleEmpty) -> 
+	Encoded = encode(Var),
+	case proplists:lookup(Var,Args) of
+		{_, [ValueList]} when is_list(ValueList) -> string:join([ Encoded ++ "=" ++ encode(Value)  || Value <- ValueList ],Separator);
+		{_, []} -> HandleEmpty(Encoded);
+		{_, Value} when is_list(Value) -> Encoded ++ "=" ++ encode(Value);
+		{_} -> HandleEmpty(Encoded);
+		none -> ""
+	end;
+process_param_variable({prefix,Var, Len},Args,_Separator,HandleEmpty) -> 
+	Encoded = encode(Var),
+	case proplists:lookup(Var,Args) of
+		{_, [ValueList]} when is_list(ValueList) -> Encoded ++ "=" ++ encode(string:substr(string:join(ValueList,","),0,Len));
+		{_, []} -> HandleEmpty(Encoded);
+		{_, Value} when is_list(Value) -> Encoded ++ "=" ++ encode(string:substr(Value,0,Len));
+		{_} -> HandleEmpty(Encoded);
+		none -> ""
+	end.
 -spec is_alpha(char()) -> boolean(). 
 is_alpha(C) -> 
 	(16#41 =< C andalso C =< 16#5A) orelse (16#61 =< C andalso C =< 16#7A).
