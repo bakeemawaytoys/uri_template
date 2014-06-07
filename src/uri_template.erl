@@ -23,8 +23,8 @@
 	| 16#D0000..16#DFFFD | 16#E1000..16#EFFFD.
 -type iprivate() :: 16#E000..16#F8FF | 16#F0000..16#FFFFD | 16#100000..16#10FFFD.
 
--type expression_argument() :: 	{string(), string()} | {string(), [string(), ...]} | {string(), [{string(),string()}, ...]}. 
--type expression_arguments() :: [expression_argument(), ...].
+-type expression_argument() :: 	{string(), string()} | {string(), [string()]} | {string(), [{string(),string()}]} | {string()}. 
+-type expression_arguments() :: [expression_argument()].
 %% API
 
 -spec sub(string(), expression_arguments()) -> string().
@@ -86,8 +86,7 @@ process_expression({query_component, Args, Vars}) ->
 	"?" ++ string:join([ process_param_variable(Var,Args,Separator, fun(Value) -> Value ++ "=" end) || Var <- Vars  ],Separator);
 process_expression({query_continuation, Args, Vars}) -> 
 	Separator = "&",
-       	Separator ++ string:join([ process_param_variable(Var,Args,Separator, fun(Value) -> Value ++ "=" end) || Var <- Vars  ],Separator);
-process_expression(_) -> barf.
+       	Separator ++ string:join([ process_param_variable(Var,Args,Separator, fun(Value) -> Value ++ "=" end) || Var <- Vars  ],Separator).
 
 
 -spec process_variable(expression_variable(),expression_arguments()) -> string().
