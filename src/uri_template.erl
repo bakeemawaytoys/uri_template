@@ -23,8 +23,9 @@
 	| 16#D0000..16#DFFFD | 16#E1000..16#EFFFD.
 -type iprivate() :: 16#E000..16#F8FF | 16#F0000..16#FFFFD | 16#100000..16#10FFFD.
 
--type expression_argument() :: 	{string(), string()} | {string(), [string()]} | {string(), [{string(),string()}]} | {string()}. 
+-type expression_argument() :: 	{string(), string()} | {string(), [string()]} | {string(), [{string(),string()}|{string()}]} | {string()}. 
 -type expression_arguments() :: [expression_argument()].
+
 %% API
 
 -spec sub(string(), expression_arguments()) -> string().
