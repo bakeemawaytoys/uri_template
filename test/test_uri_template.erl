@@ -4,6 +4,7 @@
 level_1_test_() -> run_tests(1).
 level_2_test_() -> run_tests(2).
 level_3_test_() -> run_tests(3).
+%%level_4_test_() -> run_tests(4).
 
 run_tests(Level) ->
 	{Variables, Tests} = load_tests_for_level(Level),
@@ -11,7 +12,7 @@ run_tests(Level) ->
 
 create_test_fun(Template, Variables, Expected) ->
 	fun() -> 
-		Result = uri_template:sub(Variables,Template),
+		Result = uri_template:sub(Template,Variables),
 		?debugVal(Result),
 		?debugVal(sets:to_list(Expected)),
 		?assertEqual(true, sets:is_element(Result,Expected)) 
@@ -28,8 +29,9 @@ convert_expected_data(Data) when is_list(Data) -> sets:from_list([ binary_to_lis
 convert_variables(Variables) -> [convert_variable(V) || V <- Variables].
 convert_variable({Name, Value}) when is_binary(Value)  -> {binary_to_list(Name),binary_to_list(Value)};
 convert_variable({Name, Values}) when is_list(Values) -> {binary_to_list(Name), [convert_variable_list_entry(V) || V <- Values]}.
-convert_variable_list_entry({Key,Value}) -> {binary_to_list(Key),binary_to_list(Value)};
-convert_variable_list_entry(Value) when is_list(Value) -> binary_to_list(Value).
+convert_variable_list_entry({Key,Value}) when is_binary(Value) -> {binary_to_list(Key),binary_to_list(Value)};
+convert_variable_list_entry({Key,Value}) when is_list(Value) -> {binary_to_list(Key), [{binary_to_list(K), binary_to_list(V)} || {K,V} <- Value]};
+convert_variable_list_entry(Value) when is_binary(Value) -> binary_to_list(Value).
 
 load_tests_for_level(1) -> load_tests_for_name(<<"Level 1 Examples">>);
 load_tests_for_level(2) -> load_tests_for_name(<<"Level 2 Examples">>);
