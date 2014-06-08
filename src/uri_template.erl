@@ -94,35 +94,50 @@ process_expression({query_continuation, Args, Vars}) ->
 process_variable(Var, Args) -> process_variable(Var, Args, fun encode/1).
 
 -spec process_variable(expression_variable(), expression_arguments(), fun((string()) -> string())) -> string().
-process_variable({Var}, Args, Encoder) -> Encoder(proplists:get_value(Var,Args,""));
+process_variable({Var}, Args, Encoder) -> process_value(proplists:get_value(Var,Args,""),Encoder);
+%% TODO Handle lists of strings and assoc arrays
 process_variable({explode, Var}, Args, Encoder) -> Encoder(proplists:get_value(Var,Args,""));
 process_variable({prefix, Var, Len}, Args, Encoder) -> Encoder(string:substr(proplists:get_value(Var,Args,""), 1, Len)).
+
+-spec process_value(expression_argument(), fun((string()) -> string())) -> string().
+process_value([H|_] = Val,Encoder) when is_integer(H) -> Encoder(Val);
+process_value(List,Encoder) -> string:join([process_list_value(V,Encoder) || V <- List],",").
+
+-spec process_list_value({string()},fun((string()) -> string())) -> string();
+						({string(),string()}, fun((string()) -> string())) -> string();
+						(string(),fun((string()) -> string())) -> string().
+process_list_value({_},_Encoder) -> "";
+process_list_value({Key,Value}, Encoder) -> Encoder(Key) ++ "," ++ Encoder(Value);
+process_list_value(Value,Encoder) when is_list(Value) -> Encoder(Value).
 
 -spec process_param_variable(expression_variable(),expression_arguments(),string(),fun((string()) -> string())) -> string().
 process_param_variable({Var},Args,_Separator,HandleEmpty) ->
 	Encoded = encode(Var),
        	case proplists:lookup(Var,Args) of 
-		{_, [ValueList]} when is_list(ValueList) -> Encoded ++ "=" ++ string:join(encode(ValueList),",");
+		{_, [H|_] = ValueList} when is_list(H) -> Encoded ++ "=" ++ string:join([encode(Value) || Value <- ValueList],",");
 		{_,[]} -> HandleEmpty(Encoded);
-		{_, Value} when is_list(Value) -> Encoded ++ "=" ++ encode(Value);
+		{_, [H|_] = Value} when is_integer(H) -> Encoded ++ "=" ++ encode(Value);
+		{_, [H|_] = TupleList} when is_tuple(H) -> Encoded ++ "=" ++ string:join([encode(Key) ++ "," ++ encode(Value) || {Key, Value} <- TupleList],",");
 		{_}  -> HandleEmpty(Encoded);
 		none -> ""
 	end;
 process_param_variable({explode,Var},Args,Separator,HandleEmpty) -> 
 	Encoded = encode(Var),
 	case proplists:lookup(Var,Args) of
-		{_, [ValueList]} when is_list(ValueList) -> string:join([ Encoded ++ "=" ++ encode(Value)  || Value <- ValueList ],Separator);
+		{_, [H|_] = ValueList} when is_list(H) -> string:join([ Encoded ++ "=" ++ encode(Value)  || Value <- ValueList ],Separator);
 		{_, []} -> HandleEmpty(Encoded);
-		{_, Value} when is_list(Value) -> Encoded ++ "=" ++ encode(Value);
+		{_, [H|_] = Value} when is_integer(H) -> Encoded ++ "=" ++ encode(Value);
+		{_, [H|_] = TupleList} when is_tuple(H) -> string:join([ encode(Key) ++ "=" ++ encode(Value)  || {Key,Value} <- TupleList ],Separator);
 		{_} -> HandleEmpty(Encoded);
 		none -> ""
 	end;
 process_param_variable({prefix,Var, Len},Args,_Separator,HandleEmpty) -> 
 	Encoded = encode(Var),
 	case proplists:lookup(Var,Args) of
-		{_, [ValueList]} when is_list(ValueList) -> Encoded ++ "=" ++ encode(string:substr(string:join(ValueList,","),1,Len));
+		{_, [H|_] = ValueList} when is_list(H) -> Encoded ++ "=" ++ encode(string:substr(string:join(ValueList,","),1,Len));
 		{_, []} -> HandleEmpty(Encoded);
-		{_, Value} when is_list(Value) -> Encoded ++ "=" ++ encode(string:substr(Value,1,Len));
+		{_, [H|_] = Value} when is_integer(H) -> Encoded ++ "=" ++ encode(string:substr(Value,1,Len));
+		%% Handle assoc array
 		{_} -> HandleEmpty(Encoded);
 		none -> ""
 	end.

@@ -4,7 +4,7 @@
 level_1_test_() -> run_tests(1).
 level_2_test_() -> run_tests(2).
 level_3_test_() -> run_tests(3).
-%%level_4_test_() -> run_tests(4).
+level_4_test_() -> run_tests(4).
 
 run_tests(Level) ->
 	{Variables, Tests} = load_tests_for_level(Level),
