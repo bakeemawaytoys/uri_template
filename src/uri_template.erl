@@ -70,7 +70,7 @@ varspec(Var) -> modifier_level4(string:tokens(Var,":")).
 -spec modifier_level4([string(), ...]) -> expression_variable().
 modifier_level4([Var,Len]) -> case string:to_integer(Len) of {Int, []} when Int >= 0 ->  { prefix, Var, Int } end;
 modifier_level4([Var]) -> case lists:reverse(Var) of 
-				[$*|V] -> {explode, V};
+				[$*|V] -> {explode, lists:reverse(V)};
 				_ -> {Var}
 			end.
 
