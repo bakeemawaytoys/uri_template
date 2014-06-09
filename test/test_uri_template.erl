@@ -11,12 +11,13 @@ run_tests(Level) ->
 	[ create_test_fun(Template, Variables, Expected) || {Template, Expected} <- Tests ].
 
 create_test_fun(Template, Variables, Expected) ->
-	fun() -> 
+	{Template,fun() -> 
 		Result = uri_template:sub(Template,Variables),
+		?debugVal(Variables),
 		?debugVal(Result),
 		?debugVal(sets:to_list(Expected)),
 		?assertEqual(true, sets:is_element(Result,Expected)) 
-	end.
+	end}.
 
 
 %% Functions for loading and converting the tests data.
