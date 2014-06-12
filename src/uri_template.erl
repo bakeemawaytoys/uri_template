@@ -76,10 +76,10 @@ modifier_level4([Var]) -> case lists:reverse(Var) of
 
 -spec process_expression({atom(),expression_arguments(),[string()]}) -> string().
 process_expression({expansion, Args, Vars}) -> string:join([process_variable(Var, Args) || Var <- Vars  ],",");
-process_expression({reserved, Args, Vars}) -> string:join([process_variable(Var, Args, fun reserved_encode/1) || Var <- Vars], ",");
+process_expression({reserved, Args, Vars}) -> string:join([process_variable(Var, Args, fun reserved_encode/1, ",") || Var <- Vars], ",");
 process_expression({fragment, Args, Vars}) -> "#" ++ process_expression({reserved, Args, Vars});
-process_expression({dot, Args, Vars}) -> "." ++ string:join([process_variable(Var, Args) || Var <- Vars  ],".");
-process_expression({path, Args, Vars}) -> "/" ++ string:join([process_variable(Var, Args) || Var <- Vars  ],"/");
+process_expression({dot, Args, Vars}) -> "." ++ string:join([process_variable(Var, Args, ".") || Var <- Vars  ],".");
+process_expression({path, Args, Vars}) -> "/" ++ string:join([process_variable(Var, Args, "/") || Var <- Vars  ],"/");
 process_expression({path_param, Args, Vars}) -> 
 	Separator = ";",
        	Separator ++ string:join([ process_param_variable(Var,Args,Separator, fun(Value) -> Value end) || Var <- Vars  ],Separator);
@@ -92,24 +92,36 @@ process_expression({query_continuation, Args, Vars}) ->
 
 
 -spec process_variable(expression_variable(),expression_arguments()) -> string().
-process_variable(Var, Args) -> process_variable(Var, Args, fun encode/1).
+process_variable(Var, Args) -> process_variable(Var, Args, fun encode/1,",").
 
--spec process_variable(expression_variable(), expression_arguments(), encoder_function()) -> string().
-process_variable({Var}, Args, Encoder) -> process_value(proplists:get_value(Var,Args,""),Encoder);
+process_variable(Var, Args, Separator) -> process_variable(Var, Args, fun encode/1, Separator).
+
+-spec process_variable(expression_variable(), expression_arguments(), encoder_function(), string()) -> string().
+process_variable({Var}, Args, Encoder,_Separator) -> process_value(proplists:get_value(Var,Args,""),Encoder);
 %% TODO Handle lists of strings and assoc arrays
-process_variable({explode, Var}, Args, Encoder) -> Encoder(proplists:get_value(Var,Args,""));
-process_variable({prefix, Var, Len}, Args, Encoder) -> Encoder(string:substr(proplists:get_value(Var,Args,""), 1, Len)).
+process_variable({explode, Var}, Args, Encoder, Separator) ->
+	case proplists:lookup(Var,Args) of
+		{_,[H|_] = ValueList} when is_list(H) -> string:join([ Encoder(Value) || Value <- ValueList],Separator);
+		%% TODO: Handle tuple with no value
+		{_,[H|_] = List } when is_tuple(H) -> string:join([ Encoder(Key) ++ "=" ++ Encoder(Value)  || {Key,Value} <- List  ],Separator);
+		{_,[H|_] = Value} when is_integer(H) -> Encoder(Value);
+		{_,[]} -> "";
+		none -> ""
+	end;
+process_variable({prefix, Var, Len}, Args, Encoder, _Separator) -> Encoder(string:substr(proplists:get_value(Var,Args,""), 1, Len)).
 
 -spec process_value(expression_argument(), encoder_function()) -> string().
 process_value([H|_] = Val,Encoder) when is_integer(H) -> Encoder(Val);
 process_value(List,Encoder) -> string:join([process_list_value(V,Encoder) || V <- List],",").
 
 -spec process_list_value({string()},encoder_function()) -> string();
-						({string(),string()}, fun((string()) -> string())) -> string();
-						(string(),fun((string()) -> string())) -> string().
+	({string(),string()}, encoder_function()) -> string();
+	(string(), encoder_function()) -> string().
 process_list_value({_},_Encoder) -> "";
 process_list_value({Key,Value}, Encoder) -> Encoder(Key) ++ "," ++ Encoder(Value);
 process_list_value(Value,Encoder) when is_list(Value) -> Encoder(Value).
+
+%% Variable processing for parameter style expressions
 
 -spec process_param_variable(expression_variable(),expression_arguments(),string(),encoder_function()) -> string().
 process_param_variable({Var},Args,_Separator,HandleEmpty) ->
@@ -137,10 +149,10 @@ process_param_variable({explode,Var},Args,Separator,HandleEmpty) ->
 process_param_variable({prefix,Var, Len},Args,_Separator,HandleEmpty) -> 
 	Encoded = encode(Var),
 	case proplists:lookup(Var,Args) of
-		{_, [H|_]} when is_list(H) -> ""; 
+		{_, [H|_]} when is_list(H) -> ""; %% Prefix is not applicable for lists
 		{_, []} -> HandleEmpty(Encoded);
 		{_, [H|_] = Value} when is_integer(H) -> Encoded ++ "=" ++ encode(string:substr(Value,1,Len));
-		{_, [H|_]} when is_tuple(H) -> "";
+		{_, [H|_]} when is_tuple(H) -> ""; %% Prefix is not valid for assoc arrays
 		{_} -> HandleEmpty(Encoded);
 		none -> ""
 	end.

@@ -11,8 +11,9 @@ run_tests(Level) ->
 	[ create_test_fun(Template, Variables, Expected) || {Template, Expected} <- Tests ].
 
 create_test_fun(Template, Variables, Expected) ->
-	{Template,fun() -> 
+	{"Template: " ++ Template,fun() -> 
 		Result = uri_template:sub(Template,Variables),
+		?debugVal(Template),
 		?debugVal(Variables),
 		?debugVal(Result),
 		?debugVal(sets:to_list(Expected)),
