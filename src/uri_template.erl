@@ -88,22 +88,21 @@ modifier_level4([Var]) -> case lists:reverse(Var) of
 				_ -> {Var}
 			end.
 
--spec process_expression({atom(),expression_arguments(),[string()]}) -> string().
+-spec process_expression({atom(),expression_arguments(),[expression_variable()]}) -> string().
 process_expression({expansion, Args, Vars}) -> string:join([process_variable(Var, Args) || Var <- Vars  ],",");
 process_expression({reserved, Args, Vars}) -> string:join([process_variable(Var, Args, fun reserved_encode/1, ",") || Var <- Vars], ",");
 process_expression({fragment, Args, Vars}) -> "#" ++ process_expression({reserved, Args, Vars});
 process_expression({dot, Args, Vars}) -> "." ++ string:join([process_variable(Var, Args, ".") || Var <- Vars  ],".");
 process_expression({path, Args, Vars}) -> "/" ++ string:join([process_variable(Var, Args, "/") || Var <- Vars  ],"/");
-process_expression({path_param, Args, Vars}) -> 
-	Separator = ";",
-       	Separator ++ string:join([ process_param_variable(Var,Args,Separator, fun(Value) -> Value end) || Var <- Vars  ],Separator);
-process_expression({query_component, Args, Vars}) ->
-       	Separator = "&",
-	"?" ++ string:join([ process_param_variable(Var,Args,Separator, fun(Value) -> Value ++ "=" end) || Var <- Vars  ],Separator);
-process_expression({query_continuation, Args, Vars}) -> 
-	Separator = "&",
-       	Separator ++ string:join([ process_param_variable(Var,Args,Separator, fun(Value) -> Value ++ "=" end) || Var <- Vars  ],Separator).
+process_expression({path_param, Args, Vars}) -> process_parameter_expression(Args, Vars, ";", ";", fun(Value) -> Value end);
+process_expression({query_component, Args, Vars}) -> process_parameter_expression(Args, Vars, "?", "&", fun(Value) -> Value ++ "=" end);
+process_expression({query_continuation, Args, Vars}) -> process_parameter_expression(Args, Vars, "&", "&", fun(Value) -> Value ++ "=" end).
 
+-spec process_parameter_expression(expression_arguments(), [expression_variable()] , string(), string(), fun((string()) -> string()) ) -> string().
+process_parameter_expression(Args, Vars, PrefixChar,SeparatorChar,HandleEmpty) ->
+	StringList = [ process_param_variable(Var,Args,SeparatorChar,HandleEmpty) || Var <- Vars  ],
+	FilteredList = remove_empty_strings(StringList),
+	PrefixChar ++ string:join(FilteredList, SeparatorChar).
 
 -spec process_variable(expression_variable(),expression_arguments()) -> string().
 process_variable(Var, Args) -> process_variable(Var, Args, fun encode/1,",").
@@ -172,7 +171,8 @@ process_param_variable({prefix,Var, Len},Args,_Separator,HandleEmpty) ->
 		none -> ""
 	end.
 
-
+-spec remove_empty_strings(list()) -> boolean().
+remove_empty_strings(List) -> lists:filter(fun ([]) -> false; (_) -> true end,List). 
 
 -spec is_alpha(char()) -> boolean(). 
 is_alpha(C) -> 
@@ -229,8 +229,8 @@ encode([H|T]) -> percent_encode(H) ++ encode(T).
 
 -spec reserved_encode(string()) -> string().
 reserved_encode([]) -> "";
-reserved_encode([$%,H,L|T]) when 16#30 =< H andalso H =< 16#39 andalso 16#65 =< H andalso H =< 16#70 andalso 16#97 =< H andalso H =< 16#102 
-		andalso 16#30 =< L andalso L =< 16#39 andalso 16#65 =< L andalso L =< 16#70 andalso 16#97 =< L andalso L =< 16#102 -> 
+reserved_encode([$%,H,L|T]) when ((16#30 =< H andalso H =< 16#39) orelse (16#41 =< H andalso H =< 16#46) orelse (16#61 =< H andalso H =< 16#66)) 
+		 andalso ((16#30 =< L andalso L =< 16#39) orelse (16#41 =< L andalso L =< 16#46) orelse (16#61 =< L andalso L =< 16#66)) -> 
 	[$%,H,L] ++ reserved_encode(T);
 reserved_encode([H|T]) -> 
 	case is_unreserved(H) orelse is_reserved(H) of 

@@ -5,7 +5,7 @@ level_1_test_() -> run_tests_for_level(1).
 level_2_test_() -> run_tests_for_level(2).
 level_3_test_() -> run_tests_for_level(3).
 level_4_test_() -> run_tests_for_level(4).
-%%additional_examples_1_test_() -> run_additional_examples(1).
+additional_examples_1_test_() -> run_additional_examples(1).
 
 run_tests_for_level(Level) ->
 	{Variables, Tests} = load_tests_for_level(Level),
