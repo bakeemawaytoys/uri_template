@@ -1,0 +1,6 @@
+TODO
+- Convert test data files so they don't need to be parsed on load
+- Validate arguments as they are added to the set
+- Handle repeatedly adding arguments with the same name 
+- Create separate functions for lookup of values in the argument set to hide the use of propslist
+- Separate parsing of expression and processing of expression so that parsing is only done once with the curried version of sub
