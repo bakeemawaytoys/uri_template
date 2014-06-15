@@ -2,7 +2,9 @@
 
 %% uri_template: uri_template library's entry point.
 
--export([sub/2,sub/1]).
+-export([sub/2,sub/1,new/0,add/3]).
+
+-export_type([expression_arguments/0]).
 
 -type alpha() :: 16#41..16#5A | 16#61..16#7A.
 -type digit() :: 16#30..16#39.
@@ -23,11 +25,23 @@
 	| 16#D0000..16#DFFFD | 16#E1000..16#EFFFD.
 -type iprivate() :: 16#E000..16#F8FF | 16#F0000..16#FFFFD | 16#100000..16#10FFFD.
 
--type expression_argument() :: 	{string(), string()} | {string(), [string()]} | {string(), [{string(),string()}|{string()}]} | {string()}. 
--type expression_arguments() :: [expression_argument()].
+-type expression_argument() :: 	{nonempty_string(), {string, string()}} | {nonempty_string(), {list, [string()]}} | {nonempty_string(), {assoc_array, [{nonempty_string(),string()}|{nonempty_string()}]}} | {string()}. 
+-opaque expression_arguments() :: [expression_argument()].
 
 -type encoder_function() :: fun((string()) -> string()).
 %% API
+
+-spec new() -> expression_arguments().
+new() -> [].
+
+-spec add(expression_arguments(), string(),[]) -> expression_arguments()
+	; (expression_arguments(), string(), nonempty_string()) -> expression_arguments()
+	; (expression_arguments(), nonempty_string(),[nonempty_string()]) -> expression_arguments()
+	; (expression_arguments(), nonempty_string(), [{nonempty_string(),nonempty_string()}|{nonempty_string}]) -> expression_arguments().
+add(Args, Key, []) -> [{Key,[]}| Args];
+add(Args, Key, [H|_] = Value) when is_integer(H) andalso H >= 0 -> [{Key, {string, Value}}|Args];
+add(Args, Key, [H|_] = ValueList) when is_list(H) -> [{Key, {list, ValueList}}|Args];
+add(Args, Key, [{K,V}|_] = AssocList) when is_list(K) andalso is_list(V) -> [{Key, {assoc_array, AssocList}}|Args].
 
 -spec sub(string(), expression_arguments()) -> string().
 sub([],_Args) -> "";
@@ -97,29 +111,30 @@ process_variable(Var, Args) -> process_variable(Var, Args, fun encode/1,",").
 process_variable(Var, Args, Separator) -> process_variable(Var, Args, fun encode/1, Separator).
 
 -spec process_variable(expression_variable(), expression_arguments(), encoder_function(), string()) -> string().
-process_variable({Var}, Args, Encoder,_Separator) -> process_value(proplists:get_value(Var,Args,""),Encoder);
+process_variable({Var}, Args, Encoder,_Separator) -> process_value(proplists:get_value(Var,Args,{string,""}),Encoder);
 %% TODO Handle lists of strings and assoc arrays
 process_variable({explode, Var}, Args, Encoder, Separator) ->
 	case proplists:lookup(Var,Args) of
-		{_,[H|_] = ValueList} when is_list(H) -> string:join([ Encoder(Value) || Value <- ValueList],Separator);
+		{_, {list, ValueList}} -> string:join([ Encoder(Value) || Value <- ValueList],Separator);
 		%% TODO: Handle tuple with no value
-		{_,[H|_] = List } when is_tuple(H) -> string:join([ Encoder(Key) ++ "=" ++ Encoder(Value)  || {Key,Value} <- List  ],Separator);
-		{_,[H|_] = Value} when is_integer(H) -> Encoder(Value);
-		{_,[]} -> "";
+		{_, {assoc_array, List}} -> string:join([ Encoder(Key) ++ "=" ++ Encoder(Value)  || {Key,Value} <- List  ],Separator);
+		{_, {string, Value}} -> Encoder(Value);
+		{_} -> "";
 		none -> ""
 	end;
-process_variable({prefix, Var, Len}, Args, Encoder, _Separator) -> Encoder(string:substr(proplists:get_value(Var,Args,""), 1, Len)).
+process_variable({prefix, Var, Len}, Args, Encoder, _Separator) -> 
+	{string, Value} = proplists:get_value(Var,Args,{string,""}),
+	Encoder(string:substr(Value, 1, Len)).
 
 -spec process_value(expression_argument(), encoder_function()) -> string().
-process_value([H|_] = Val,Encoder) when is_integer(H) -> Encoder(Val);
-process_value(List,Encoder) -> string:join([process_list_value(V,Encoder) || V <- List],",").
+process_value({string, Val},Encoder) -> Encoder(Val);
+process_value({list, List},Encoder) -> string:join([Encoder(V) || V <- List],",");
+process_value({assoc_array, Array},Encoder) -> string:join([process_assoc_array_value(Value, Encoder) || Value <- Array],","). 
 
--spec process_list_value({string()},encoder_function()) -> string();
-	({string(),string()}, encoder_function()) -> string();
-	(string(), encoder_function()) -> string().
-process_list_value({_},_Encoder) -> "";
-process_list_value({Key,Value}, Encoder) -> Encoder(Key) ++ "," ++ Encoder(Value);
-process_list_value(Value,Encoder) when is_list(Value) -> Encoder(Value).
+-spec process_assoc_array_value({string()}, encoder_function()) -> string();
+	({string(),string()}, encoder_function()) -> string().
+process_assoc_array_value({_},_Encoder) -> "";
+process_assoc_array_value({Key,Value}, Encoder) -> Encoder(Key) ++ "," ++ Encoder(Value).
 
 %% Variable processing for parameter style expressions
 
@@ -127,32 +142,32 @@ process_list_value(Value,Encoder) when is_list(Value) -> Encoder(Value).
 process_param_variable({Var},Args,_Separator,HandleEmpty) ->
 	Encoded = encode(Var),
        	case proplists:lookup(Var,Args) of 
-		{_, [H|_] = ValueList} when is_list(H) -> Encoded ++ "=" ++ string:join([encode(Value) || Value <- ValueList],",");
+		{_, {list, ValueList}} -> Encoded ++ "=" ++ string:join([encode(Value) || Value <- ValueList],",");
 		{_,[]} -> HandleEmpty(Encoded);
-		{_, [H|_] = Value} when is_integer(H) -> Encoded ++ "=" ++ encode(Value);
+		{_, {string, Value}} -> Encoded ++ "=" ++ encode(Value);
 		%% TODO Handle single value tuples
-		{_, [H|_] = TupleList} when is_tuple(H) -> Encoded ++ "=" ++ string:join([encode(Key) ++ "," ++ encode(Value) || {Key, Value} <- TupleList],",");
+		{_, {assoc_array, TupleList}} -> Encoded ++ "=" ++ string:join([encode(Key) ++ "," ++ encode(Value) || {Key, Value} <- TupleList],",");
 		{_}  -> HandleEmpty(Encoded);
 		none -> ""
 	end;
 process_param_variable({explode,Var},Args,Separator,HandleEmpty) -> 
 	Encoded = encode(Var),
 	case proplists:lookup(Var,Args) of
-		{_, [H|_] = ValueList} when is_list(H) -> string:join([ Encoded ++ "=" ++ encode(Value)  || Value <- ValueList ],Separator);
+		{_, {list, ValueList}} -> string:join([ Encoded ++ "=" ++ encode(Value)  || Value <- ValueList ],Separator);
 		{_, []} -> HandleEmpty(Encoded);
-		{_, [H|_] = Value} when is_integer(H) -> Encoded ++ "=" ++ encode(Value);
+		{_, {string, Value}} -> Encoded ++ "=" ++ encode(Value);
 		%% TODO Handle single value tuples
-		{_, [H|_] = TupleList} when is_tuple(H) -> string:join([ encode(Key) ++ "=" ++ encode(Value)  || {Key,Value} <- TupleList ],Separator);
+		{_, {assoc_array, TupleList}} -> string:join([ encode(Key) ++ "=" ++ encode(Value)  || {Key,Value} <- TupleList ],Separator);
 		{_} -> HandleEmpty(Encoded);
 		none -> ""
 	end;
 process_param_variable({prefix,Var, Len},Args,_Separator,HandleEmpty) -> 
 	Encoded = encode(Var),
 	case proplists:lookup(Var,Args) of
-		{_, [H|_]} when is_list(H) -> ""; %% Prefix is not applicable for lists
+		{_, {list,_}} -> ""; %% Prefix is not applicable for lists
 		{_, []} -> HandleEmpty(Encoded);
-		{_, [H|_] = Value} when is_integer(H) -> Encoded ++ "=" ++ encode(string:substr(Value,1,Len));
-		{_, [H|_]} when is_tuple(H) -> ""; %% Prefix is not valid for assoc arrays
+		{_, {string, Value}} -> Encoded ++ "=" ++ encode(string:substr(Value,1,Len));
+		{_, {assoc_array,_}} -> ""; %% Prefix is not valid for assoc arrays
 		{_} -> HandleEmpty(Encoded);
 		none -> ""
 	end.
@@ -222,3 +237,4 @@ reserved_encode([H|T]) ->
 		true -> [H] ++ reserved_encode(T);
 		false -> percent_encode(H) ++ reserved_encode(T)
 	end.
+
